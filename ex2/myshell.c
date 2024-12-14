@@ -9,23 +9,9 @@
 
 int specialChar, pipeIndex;
 
-void SIGINT_handler(int signo)
-{
-    // Do nothing - or figure what to do    
-}
-
 void SIGCHLD_handler(int signo)
 {
-    // Do nothing - or figure what to do    
-}
-
-void kill_children()
-{
-    while (-1 != wait(NULL))
-    {
-        /* code */
-    }
-    
+    while (waitpid(-1, NULL, WNOHANG) > 0);
 }
 
 // Check for special characters in the arglist, and set flags accordingly
@@ -60,7 +46,7 @@ int prepare(void)
 
 int process_arglist(int count, char** arglist)
 {
-    signal(SIGINT, SIGINT_handler);
+    signal(SIGINT, SIG_IGN);
 
     checkSpecials(count, arglist);
 
