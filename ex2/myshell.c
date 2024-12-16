@@ -6,6 +6,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 int specialChar, pipeIndex;
 
@@ -52,9 +54,9 @@ int process_arglist(int count, char** arglist)
 
     switch (specialChar)
     {
-    case 1:
+    case 1: // Background
         pid_t pid;
-        arglist[count - 1] = NULL; // Replace the & character with NULL
+        arglist[count - 1] = NULL; // Replace the & character with NULL for execvp
         pid = fork();
         switch (pid)
         {
@@ -74,21 +76,85 @@ int process_arglist(int count, char** arglist)
         }
         break;
     
-    case 2:
-        /* code */
+    case 2: // Input redirection
+        pid_t pid_child;
+        int fd_in;
+        arglist[count - 2] = NULL; // Replace the < character with NULL for execvp
+        pid_child = fork();
+
+        if (pid_child == 0)
+        {
+            fd_in = open(arglist[count - 1], O_RDONLY);
+            if (fd_in == -1)
+            {
+                fprintf(stderr, "open failed while opening the file, error: %s\n", strerror(errno));
+                exit(1);
+            }
+            dup2(fd_in, STDIN);
+            close(fd_in); // Redirect file to stdin and close the file descriptor
+            execvp(arglist[0], arglist); // Execute the command
+
+            fprintf(stderr, "execvp failed while running the command, error: %s\n", strerror(errno)); // Error handling if execvp fails
+            exit(1);
+        }
+        else
+        {
+            if (pid_child == -1)
+            {
+                fprintf(stderr, "fork failed, error: %s\n", strerror(errno));
+                exit(1);
+            }
+            waitpid(pid_child, NULL, 0);
+        }
+        
         break;
 
-    case 3:
-        /* code */
+    case 3: // Output redirection
+        pid_t pid_child;
+        int fd_out;
+        arglist[count - 2] = NULL; // Replace the > character with NULL for execvp
+        pid_child = fork();
+
+        if (pid_child == 0)
+        {
+            fd_out = open(arglist[count - 1], O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            if (fd_out == -1)
+            {
+                fprintf(stderr, "open failed while opening the file, error: %s\n", strerror(errno));
+                exit(1);
+            }
+            dup2(fd_out, STDOUT);
+            close(fd_out); // Redirect stdout to file and close the file descriptor
+            execvp(arglist[0], arglist); // Execute the command
+
+            fprintf(stderr, "execvp failed while running the command, error: %s\n", strerror(errno)); // Error handling if execvp fails
+            exit(1);
+        }
+        else
+        {
+            if (pid_child == -1)
+            {
+                fprintf(stderr, "fork failed, error: %s\n", strerror(errno));
+                exit(1);
+            }
+            waitpid(pid_child, NULL, 0);
+        }
+        
+
         break;
 
     case 4: // Pipe
         pid_t pid_w, pid_r;
-        int pfds[2];
-        pipe(pfds);
+        int pfds[2], pipeStatus;
+        pipeStatus = pipe(pfds);
+        if (pipeStatus == -1)
+        {
+            fprintf(stderr, "pipe failed, error: %s\n", strerror(errno));
+            exit(1);
+        }
         arglist[pipeIndex] = NULL; // Replace the pipe character with NULL
 
-        // Split the arglist into two arrays for the two commands
+        // Split the arglist into two arrays for the two commands - execvp uses NULL terminated arrays
         char **firstCommand = arglist;
         char **secondCommand = &arglist[pipeIndex + 1];
 
@@ -116,6 +182,12 @@ int process_arglist(int count, char** arglist)
             }
             else
             {
+                if (pid_w == -1 || pid_r == -1)
+                {
+                    fprintf(stderr, "one or more fork failed, error: %s\n", strerror(errno));
+                    exit(1);
+                }
+                
                 close(pfds[0]);
                 close(pfds[1]);
                 waitpid(pid_w, NULL, 0);
