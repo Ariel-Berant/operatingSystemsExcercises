@@ -53,7 +53,25 @@ int process_arglist(int count, char** arglist)
     switch (specialChar)
     {
     case 1:
-        /* code */
+        pid_t pid;
+        arglist[count - 1] = NULL; // Replace the & character with NULL
+        pid = fork();
+        switch (pid)
+        {
+        case 0:
+            execvp(arglist[0], arglist);
+            fprintf(stderr, "execvp failed while running the command, error: %s\n", strerror(errno));
+            exit(1);
+            break;
+        
+        case -1:
+            fprintf(stderr, "fork failed, error: %s\n", strerror(errno));
+            exit(1);
+            break;
+
+        default:
+            break;
+        }
         break;
     
     case 2:
