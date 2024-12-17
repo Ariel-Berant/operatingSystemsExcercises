@@ -23,14 +23,18 @@ void checkSpecials(int count, char** arglist)
     {
         specialChar = 1;
     }
-    if (strcmp(arglist[count - 2], "<") == 0)
+    if (count > 2)
     {
-        specialChar = 2;
+        if (strcmp(arglist[count - 2], "<") == 0)
+        {
+            specialChar = 2;
+        }
+        if (strcmp(arglist[count - 2], ">") == 0)
+        {
+            specialChar = 3;
+        }
     }
-    if (strcmp(arglist[count - 2], ">") == 0)
-    {
-        specialChar = 3;
-    }
+    
     for (int i = 0; i < count; i++)
     {
         if (strcmp(arglist[i], "|") == 0){
@@ -64,8 +68,10 @@ int process_arglist(int count, char** arglist)
     checkSpecials(count, arglist);
     int dupStatus, returnVal = 1;
     pid_t pid_child;
-
-    fprintf(stdout, "Special char: %d\n", specialChar);
+    int fd_in, fd_out;
+    pid_t pid_w, pid_r;
+    int pfds[2];
+    int pipeStatus;
 
     switch (specialChar)
     {
@@ -91,7 +97,6 @@ int process_arglist(int count, char** arglist)
         break;
     
     case 2: // Input redirection
-        int fd_in;
         arglist[count - 2] = NULL; // Replace the < character with NULL for execvp
         pid_child = fork();
 
@@ -138,7 +143,6 @@ int process_arglist(int count, char** arglist)
         break;
 
     case 3: // Output redirection
-        int fd_out;
         arglist[count - 2] = NULL; // Replace the > character with NULL for execvp
         pid_child = fork();
 
@@ -185,8 +189,6 @@ int process_arglist(int count, char** arglist)
         break;
 
     case 4: // Pipe
-        pid_t pid_w, pid_r;
-        int pfds[2], pipeStatus;
         pipeStatus = pipe(pfds);
         if (pipeStatus == -1)
         {
