@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// ChatGPT discussion - https://chatgpt.com/share/67619ebc-649c-8009-a07e-3da190799dc0
+
 int specialChar, pipeIndex;
 
 // Check for special characters in the arglist, and set flags accordingly
