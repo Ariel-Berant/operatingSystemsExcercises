@@ -155,13 +155,13 @@ int process_arglist(int count, char** arglist)
                 fprintf(stderr, "signal failed, error: %s\n", strerror(errno));
                 exit(1);
             }
-            fd_out = open(arglist[count - 1], S_IRUSR | S_IWUSR, 0600);
+            fd_out = open(arglist[count - 1], O_WRONLY | O_CREAT | O_TRUNC, 0600);
             if (fd_out == -1)
             {
                 fprintf(stderr, "open failed while opening the file, error: %s\n", strerror(errno));
                 exit(1);
             }
-            dupStatus = dup2(STDOUT, fd_out);
+            dupStatus = dup2(fd_out, STDOUT);
             if (dupStatus == -1)
             {
                 fprintf(stderr, "dup2 failed while redirecting file to stdin, error: %s\n", strerror(errno));
