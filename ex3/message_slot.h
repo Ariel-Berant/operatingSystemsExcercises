@@ -21,6 +21,7 @@ struct channel
 {
     int channel_id;
     char message[BUF_LEN];
+    int msg_len;
     channel *next;
 };
 

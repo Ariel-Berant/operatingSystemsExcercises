@@ -47,14 +47,52 @@ static int device_open(struct inode *inode,
         return -1;
     }
 
-    device_info.channels[minor] = kmalloc(sizeof(channel), GFP_KERNEL); // add code to make it so that the channel is not allocated if it already exists
-    // add code to make it so that channel creation is only in the ioctl\read\write functions
+    if (device_info.channels[minor] == NULL)
+    {
+        device_info.channels[minor] = kmalloc(sizeof(channel), GFP_KERNEL);
+        if (device_info.channels[minor] == NULL)
+        {
+            errno = ENOMEM;
+            return -1;
+        }
+        
+        device_info.channels[minor]->channel_id = -1;
+        device_info.channels[minor]->msg_len = -1;
+        device_info.channels[minor]->next = NULL;
+        return SUCCESS;
+    }
+    else
+    {
+        errno = EEXIST;
+        return -1;
+    }
+    
+    // ensure code is ok and (maybe) works?
 }
 
 //---------------------------------------------------------------
 static int device_release(struct inode *inode,
-                          struct file *file)
+                          struct file *file) // free even if not allocated, check if ok
 {
+    int minor = iminor(inode);
+    if (minor < 0 || minor > 255)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (device_info.channels[minor] != NULL)
+    {
+        channel *temp = device_info.channels[minor];
+        while (temp != NULL) // free all channels - free current, then go to next
+        {
+            channel *next = temp->next;
+            kfree(temp);
+            temp = next;
+        }
+    }
+
+    return SUCCESS;
 }
 
 //---------------------------------------------------------------
@@ -64,7 +102,7 @@ static int device_release(struct inode *inode,
 static ssize_t device_read(struct file *file,
                            char __user *buffer,
                            size_t length,
-                           loff_t *offset)
+                           loff_t *offset) // NOT FINISHED, CONTINUE FROM HERE
 {
     if ((length > BUF_LEN) || (length == 0))
     {
@@ -76,9 +114,40 @@ static ssize_t device_read(struct file *file,
         errno = EINVAL;
         return -1;
     }
+    int channel_num = (int)file->private_data;
+    channel *channel = device_info.channels[channel_num];
+    if (channel == NULL)
+    {
+        errno = EWOULDBLOCK;
+        return -1;
+    }
+    while (channel != NULL)
+    {
+        if (channel->channel_id == channel_num)
+        {
+            if (channel->msg_len == -1)
+            {
+                errno = EINVAL;
+                return -1;
+            }
+            if (channel->msg_len > length)
+            {
+                errno = ENOSPC;
+                return -1;
+            }
+            for (int i = 0; i < channel->msg_len; i++)
+            {
+                put_user(channel->message[i], &buffer[i]);
+            }
+            return channel->msg_len;
+        }
+        channel = channel->next;
+    }
     
+
     // invalid argument error
-    return -EINVAL;
+    errno = EINVAL;
+    return -1;
 }
 
 //---------------------------------------------------------------
@@ -106,7 +175,7 @@ static ssize_t device_write(struct file *file,
 //----------------------------------------------------------------
 static long device_ioctl(struct file *file,
                          unsigned int ioctl_command_id,
-                         unsigned int ioctl_param)
+                         unsigned int ioctl_param) // check if channel exists, if not create it and set it to private_data
 {
     // Switch according to the ioctl called
     if ((MSG_SLOT_CHANNEL != ioctl_command_id) || (ioctl_param == 0))
