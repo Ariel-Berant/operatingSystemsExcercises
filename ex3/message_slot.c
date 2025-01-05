@@ -41,13 +41,13 @@ static int device_open(struct inode *inode,
                        struct file *file)
 {
     int minor = iminor(inode);
-    if (minor < 0 || minor > 255)
+    if (minor < 0 || minor > 255) // check if minor is valid
     {
         errno = EINVAL;
         return -1;
     }
 
-    if (device_info.channels[minor] == NULL)
+    if (device_info.channels[minor] == NULL) // check if channel exists, if not create it
     {
         device_info.channels[minor] = kmalloc(sizeof(channel), GFP_KERNEL);
         if (device_info.channels[minor] == NULL)
@@ -61,7 +61,7 @@ static int device_open(struct inode *inode,
         device_info.channels[minor]->next = NULL;
         return SUCCESS;
     }
-    else
+    else // channel exists, can't open
     {
         errno = EEXIST;
         return -1;
