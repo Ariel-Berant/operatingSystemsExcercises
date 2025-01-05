@@ -56,17 +56,15 @@ static int device_open(struct inode *inode,
             return -1;
         }
         
-        device_info.channels[minor]->channel_id = -1;
-        device_info.channels[minor]->msg_len = -1;
+        device_info.channels[minor]->channel_id = 0;
+        device_info.channels[minor]->msg_len = 0;
         device_info.channels[minor]->next = NULL;
-        return SUCCESS;
-    }
-    else // channel exists, can't open
-    {
-        errno = EEXIST;
-        return -1;
+        device_info.channels[minor]->message = NULL;
+        file->private_data = (void *)0;
     }
     
+    // if slot already exists, no need to create it
+    return SUCCESS;
     // ensure code is ok and (maybe) works?
 }
 
@@ -87,9 +85,12 @@ static int device_release(struct inode *inode,
         while (temp != NULL) // free all channels - free current, then go to next
         {
             channel *next = temp->next;
+            kfree(temp->message);
             kfree(temp);
             temp = next;
         }
+
+        device_info.channels[minor] = NULL;
     }
 
     return SUCCESS;
@@ -102,39 +103,35 @@ static int device_release(struct inode *inode,
 static ssize_t device_read(struct file *file,
                            char __user *buffer,
                            size_t length,
-                           loff_t *offset) // NOT FINISHED, CONTINUE FROM HERE
+                           loff_t *offset)
 {
-    if ((length > BUF_LEN) || (length == 0))
-    {
-        errno = EMSGSIZE;
-        return -1;
-    }
-    if ((file->private_data == NULL))
+    unsigned int channel_num = (unsigned int)file->private_data;
+    if (channel_num == 0) // check if channel set on fd
     {
         errno = EINVAL;
         return -1;
     }
-    int channel_num = (int)file->private_data;
-    channel *channel = device_info.channels[channel_num];
-    if (channel == NULL)
-    {
-        errno = EWOULDBLOCK;
-        return -1;
-    }
+    channel *channel = device_info.channels[iminor(file->f_inode)]; // get slot
     while (channel != NULL)
     {
         if (channel->channel_id == channel_num)
         {
-            if (channel->msg_len == -1)
-            {
-                errno = EINVAL;
-                return -1;
-            }
-            if (channel->msg_len > length)
+            if (channel->msg_len > length) // check if message is too long
             {
                 errno = ENOSPC;
                 return -1;
             }
+            if (channel->message == NULL) // check if a message exists on the channel
+            {
+                errno = EWOULDBLOCK;
+                return -1;
+            }
+            if (buffer == NULL) // check if buffer is valid
+            {
+                errno = EINVAL;
+                return -1;
+            }
+            
             for (int i = 0; i < channel->msg_len; i++)
             {
                 put_user(channel->message[i], &buffer[i]);
@@ -145,7 +142,7 @@ static ssize_t device_read(struct file *file,
     }
     
 
-    // invalid argument error
+    // invalid channel id, channel does not exist
     errno = EINVAL;
     return -1;
 }
@@ -160,13 +157,70 @@ static ssize_t device_write(struct file *file,
                             loff_t *offset)
 {
     ssize_t i;
-    printk("Invoking device_write(%p,%ld)\n", file, length);
-    for (i = 0; i < length && i < BUF_LEN; ++i)
+    if (buffer == NULL) // check if user buffer is valid
     {
-        get_user(the_message[i], &buffer[i]);
-        if (1 == encryption_flag)
-            the_message[i] += 1;
+        errno = EINVAL;
+        return -1;
     }
+    if ((length > BUF_LEN) || (length == 0)) // check if message is too long or empty
+    {
+        errno = EMSGSIZE;
+        return -1;
+    }
+if (file == NULL || file->private_data == NULL) // check if file is valid(no NULLPOINTEREXCEP since || and file is checked first)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    unsigned int channel_num = (unsigned int)file->private_data;
+    if (channel_num == 0) // check if channel set on fd
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    channel *channel = device_info.channels[iminor(file->f_inode)]; // get slot
+    if (channel == NULL) // check if slot was opened
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    
+    while (channel->next != NULL) //find the channel
+    {
+        if (channel->channel_id == channel_num)
+        {
+            break;
+        }
+        channel = channel->next;
+    }
+    if ((channel_num != channel->channel_id) && (channel->channel_id != 0)) // if channel doesn't exist and isn't first
+    {
+        channel->next = kmalloc(sizeof(channel), GFP_KERNEL);
+        if (channel->next == NULL)
+        {
+            errno = ENOMEM;
+            return -1;
+        }
+        channel = channel->next;
+        channel->next = NULL;
+    }
+    
+    if (channel->message != NULL) // free old message
+    {
+        kfree(channel->message);
+    }
+    channel->message = kmalloc(length, GFP_KERNEL);
+    if (channel->message == NULL)
+    {
+        errno = ENOMEM;
+        return -1;
+    }
+    for (i = 0; i < length; i++)
+    {
+        get_user(channel->message[i], &buffer[i]);
+    }
+    channel->msg_len = length;
+    channel->channel_id = channel_num;
 
     // return the number of input characters used
     return i;
@@ -180,12 +234,13 @@ static long device_ioctl(struct file *file,
     // Switch according to the ioctl called
     if ((MSG_SLOT_CHANNEL != ioctl_command_id) || (ioctl_param == 0))
     {
-        // wrong passed command
+        // wrong passed command or channel id
         errno = EINVAL;
         return -1;
     }
 
-    file->private_data = (void *)ioctl_param;
+    file->private_data = (void *)ioctl_param; // set channel id to private data
+    // if ioctl is supposed to be called only after open, check if slot was opened
 
     return SUCCESS;
 }

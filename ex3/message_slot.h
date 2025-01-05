@@ -19,9 +19,9 @@
 
 struct channel
 {
-    int channel_id;
-    char message[BUF_LEN];
-    int msg_len;
+    unsigned int channel_id;
+    char *message;
+    unsigned int msg_len;
     channel *next;
 };
 
