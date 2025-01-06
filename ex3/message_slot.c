@@ -1,4 +1,4 @@
-// insert module from ex3/recitationCode/chardev.c here, modify according to the instructions
+\// insert module from ex3/recitationCode/chardev.c here, modify according to the instructions
 //  major number = 235 - done
 //  add <linux/slab.h> for kmalloc - done
 //  Declare what kind of code we want
@@ -17,6 +17,7 @@
 #include <linux/string.h>  /* for memset. NOTE - not string.h!*/
 #include <linux/slab.h>    /* for kmalloc */
 #include <linux/unistd.h>
+#include <linux/errno.h>
 
 MODULE_LICENSE("GPL");
 
