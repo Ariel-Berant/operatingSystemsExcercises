@@ -25,6 +25,17 @@ MODULE_LICENSE("GPL");
 // Our custom definitions of IOCTL operations
 #include "message_slot.h"
 
+struct slot_channel
+{
+    unsigned int channel_id;
+    char *message;
+    unsigned int msg_len;
+    struct slot_channel *next;
+};
+
+typedef struct slot_channel slot_channel;
+
+
 struct chardev_info
 {
     slot_channel **channels;
@@ -68,26 +79,12 @@ static int device_open(struct inode *inode,
 static int device_release(struct inode *inode,
                           struct file *file) // free even if not allocated, check if ok
 {
-    int minor = iminor(inode);
-    if (minor < 0 || minor > 255)
+    if (file == NULL)
     {
         return -EINVAL;
     }
-
-    if (device_info.channels[minor] != NULL)
-    {
-        slot_channel *temp = device_info.channels[minor];
-        while (temp != NULL) // free all channels - free current, then go to next
-        {
-            slot_channel *next = temp->next;
-            kfree(temp->message);
-            kfree(temp);
-            temp = next;
-        }
-
-        device_info.channels[minor] = NULL;
-    }
-
+    
+    file->private_data = NULL;
     return SUCCESS;
 }
 

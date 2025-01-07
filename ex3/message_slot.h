@@ -19,14 +19,3 @@
 #define SUCCESS 0
 
 #endif
-
-struct slot_channel
-{
-    unsigned int channel_id;
-    char *message;
-    unsigned int msg_len;
-    struct slot_channel *next;
-};
-
-typedef struct slot_channel slot_channel;
-
