@@ -5,8 +5,9 @@
 #include <sys/ioctl.h> /* ioctl */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-int main(int argc, char **argv[])
+int main(int argc, char **argv)
 {
     if (argc != 4)
     {
@@ -14,13 +15,13 @@ int main(int argc, char **argv[])
         exit(1);
     }
 
-    char *device_file = argv[1], *errorStr;
+    char *device_file = argv[1], errorStr[256];
     int file_desc;
 
     file_desc = open(device_file, O_RDWR);
     if (file_desc < 0)
     {
-        sprintf(errorStr, "Can't open device file: %s\n", device_file);
+        snprintf(errorStr, 256, "Can't open device file: %s\n", device_file);
         perror(errorStr);
         exit(1);
     }

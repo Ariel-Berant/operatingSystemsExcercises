@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main(int argc, char **argv[])
+int main(int argc, char **argv)
 {
     if (argc != 3)
     {
@@ -14,19 +14,14 @@ int main(int argc, char **argv[])
         exit(1);
     }
 
-    char *device_file = argv[1], *errorStr, message[BUF_LEN];
-    if (message == NULL)
-    {
-        perror("Memory allocation failed\n");
-        exit(1);
-    }
+    char *device_file = argv[1], errorStr[256], message[BUF_LEN];
     
     int file_desc;
 
     file_desc = open(device_file, O_RDWR);
     if (file_desc < 0)
     {
-        sprintf(errorStr, "Can't open device file: %s\n", device_file);
+        snprintf(errorStr, 256, "Can't open device file: %s\n", device_file);
         perror(errorStr);
         exit(1);
     }
@@ -42,14 +37,13 @@ int main(int argc, char **argv[])
     }
 
     ret_val = read(file_desc, message, BUF_LEN); // if not failed, ret_val is the number of bytes read
-    if (ret_val < 0)
+    if (ret_val < 0) // if read failed, ret_val is negative
     {
         perror("read failed\n");
         exit(1);
     }
 
-    write(stdout, message, ret_val);
-    free(message);
+    write(1, message, ret_val); // stdout's fd is defined as 1
 
     close(file_desc);
     exit(0);
