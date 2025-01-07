@@ -20,13 +20,13 @@
 
 #endif
 
-struct channel
+struct slot_channel
 {
     unsigned int channel_id;
     char *message;
     unsigned int msg_len;
-    struct channel *next;
+    struct slot_channel *next;
 };
 
-typedef struct channel channel;
+typedef struct slot_channel slot_channel;
 

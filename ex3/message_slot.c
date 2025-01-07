@@ -1,4 +1,4 @@
-\// insert module from ex3/recitationCode/chardev.c here, modify according to the instructions
+// insert module from ex3/recitationCode/chardev.c here, modify according to the instructions
 //  major number = 235 - done
 //  add <linux/slab.h> for kmalloc - done
 //  Declare what kind of code we want
@@ -10,6 +10,7 @@
 #undef MODULE
 #define MODULE
 
+#include <linux/types.h>   /* size_t and more*/
 #include <linux/kernel.h>  /* We're doing kernel work */
 #include <linux/module.h>  /* Specifically, a module */
 #include <linux/fs.h>      /* for register_chrdev */
@@ -26,16 +27,12 @@ MODULE_LICENSE("GPL");
 
 struct chardev_info
 {
-    channel channels[256];
+    slot_channel **channels;
 };
 
-// used to prevent concurent access into the same device
-static int dev_open_flag = 0;
+typedef struct chardev_info chardev_info;
 
-static struct chardev_info device_info;
-
-// The message the device will give when asked
-static char the_message[BUF_LEN];
+static chardev_info device_info;
 
 //================== DEVICE FUNCTIONS ===========================
 static int device_open(struct inode *inode,
@@ -44,26 +41,24 @@ static int device_open(struct inode *inode,
     int minor = iminor(inode);
     if (minor < 0 || minor > 255) // check if minor is valid
     {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
 
     if (device_info.channels[minor] == NULL) // check if channel exists, if not create it
     {
-        device_info.channels[minor] = kmalloc(sizeof(channel), GFP_KERNEL);
+        device_info.channels[minor] = kmalloc(sizeof(slot_channel), GFP_KERNEL);
         if (device_info.channels[minor] == NULL)
         {
-            errno = ENOMEM;
-            return -1;
+            return -ENOMEM;
         }
-        
+        printk(KERN_INFO "Slot number %d created\n", minor);
         device_info.channels[minor]->channel_id = 0;
         device_info.channels[minor]->msg_len = 0;
         device_info.channels[minor]->next = NULL;
         device_info.channels[minor]->message = NULL;
         file->private_data = (void *)0;
     }
-    
+
     // if slot already exists, no need to create it
     return SUCCESS;
     // ensure code is ok and (maybe) works?
@@ -76,16 +71,15 @@ static int device_release(struct inode *inode,
     int minor = iminor(inode);
     if (minor < 0 || minor > 255)
     {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
 
     if (device_info.channels[minor] != NULL)
     {
-        channel *temp = device_info.channels[minor];
+        slot_channel *temp = device_info.channels[minor];
         while (temp != NULL) // free all channels - free current, then go to next
         {
-            channel *next = temp->next;
+            slot_channel *next = temp->next;
             kfree(temp->message);
             kfree(temp);
             temp = next;
@@ -106,46 +100,52 @@ static ssize_t device_read(struct file *file,
                            size_t length,
                            loff_t *offset)
 {
-    unsigned int channel_num = (unsigned int)file->private_data;
+    int i;
+    slot_channel *channel = NULL;
+    unsigned int channel_num = (unsigned int)(unsigned long)(file->private_data);
     if (channel_num == 0) // check if channel set on fd
     {
-        errno = EINVAL;
-        return -1;
+        printk(KERN_INFO "Channel number is 0 somehow");
+        return -EINVAL;
     }
-    channel *channel = device_info.channels[iminor(file->f_inode)]; // get slot
+    channel = device_info.channels[iminor(file->f_inode)]; // get slot
+    if (channel == NULL)
+    {
+        printk(KERN_INFO "Slot is not open");
+        return -EINVAL;
+    }
     while (channel != NULL)
     {
         if (channel->channel_id == channel_num)
         {
             if (channel->msg_len > length) // check if message is too long
             {
-                errno = ENOSPC;
-                return -1;
+                return -ENOSPC;
             }
             if (channel->message == NULL) // check if a message exists on the channel
             {
-                errno = EWOULDBLOCK;
-                return -1;
+                return -EWOULDBLOCK;
             }
             if (buffer == NULL) // check if buffer is valid
             {
-                errno = EINVAL;
-                return -1;
+                printk(KERN_INFO "Got NULL buffer");
+                return -EINVAL;
             }
-            
-            for (int i = 0; i < channel->msg_len; i++)
+
+            for (i = 0; i < channel->msg_len; i++)
             {
                 put_user(channel->message[i], &buffer[i]);
             }
+            printk(KERN_INFO "Read from slot number %d channel number %d, message: %s\n", iminor(file->f_inode), channel_num, channel->message);
+            printk(KERN_INFO "Slot number is %d first channel num is %d channel to read\\write from is %d", iminor(file->f_inode), device_info.channels[iminor(file->f_inode)]->channel_id, channel_num);
             return channel->msg_len;
         }
         channel = channel->next;
     }
-    
 
-    // invalid channel id, channel does not exist
-    errno = EINVAL;
-    return -1;
+    // invalid channel id, channel does not exist or slot not opened
+    printk(KERN_INFO "Failed to read from slot number %d channel number %d", iminor(file->f_inode), channel_num);
+    return -EINVAL;
 }
 
 //---------------------------------------------------------------
@@ -158,35 +158,32 @@ static ssize_t device_write(struct file *file,
                             loff_t *offset)
 {
     ssize_t i;
+    unsigned int channel_num;
+    slot_channel *channel = NULL;
     if (buffer == NULL) // check if user buffer is valid
     {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
     if ((length > BUF_LEN) || (length == 0)) // check if message is too long or empty
     {
-        errno = EMSGSIZE;
-        return -1;
+        return -EMSGSIZE;
     }
-if (file == NULL || file->private_data == NULL) // check if file is valid(no NULLPOINTEREXCEP since || and file is checked first)
+    if (file == NULL || file->private_data == NULL) // check if file is valid(no NULLPOINTEREXCEP since || and file is checked first)
     {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
-    unsigned int channel_num = (unsigned int)file->private_data;
+    channel_num = (unsigned int)(unsigned long)(file->private_data);
     if (channel_num == 0) // check if channel set on fd
     {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
-    channel *channel = device_info.channels[iminor(file->f_inode)]; // get slot
-    if (channel == NULL) // check if slot was opened
+    channel = device_info.channels[iminor(file->f_inode)]; // get slot
+    if (channel == NULL)                                   // check if slot was opened
     {
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
-    
-    while (channel->next != NULL) //find the channel
+
+    while (channel->next != NULL) // find the channel
     {
         if (channel->channel_id == channel_num)
         {
@@ -196,16 +193,15 @@ if (file == NULL || file->private_data == NULL) // check if file is valid(no NUL
     }
     if ((channel_num != channel->channel_id) && (channel->channel_id != 0)) // if channel doesn't exist and isn't first
     {
-        channel->next = kmalloc(sizeof(channel), GFP_KERNEL);
+        channel->next = kmalloc(sizeof(slot_channel), GFP_KERNEL);
         if (channel->next == NULL)
         {
-            errno = ENOMEM;
-            return -1;
+            return -ENOMEM;
         }
         channel = channel->next;
         channel->next = NULL;
     }
-    
+
     if (channel->message != NULL) // free old message
     {
         kfree(channel->message);
@@ -213,8 +209,7 @@ if (file == NULL || file->private_data == NULL) // check if file is valid(no NUL
     channel->message = kmalloc(length, GFP_KERNEL);
     if (channel->message == NULL)
     {
-        errno = ENOMEM;
-        return -1;
+        return -ENOMEM;
     }
     for (i = 0; i < length; i++)
     {
@@ -223,6 +218,9 @@ if (file == NULL || file->private_data == NULL) // check if file is valid(no NUL
     channel->msg_len = length;
     channel->channel_id = channel_num;
 
+    printk(KERN_INFO "Wrote to slot number %d channel number %d, message: %s\n", iminor(file->f_inode), channel_num, channel->message);
+    printk(KERN_INFO "Slot number %d first channel num is %d", iminor(file->f_inode), device_info.channels[iminor(file->f_inode)]->channel_id);
+
     // return the number of input characters used
     return i;
 }
@@ -230,18 +228,19 @@ if (file == NULL || file->private_data == NULL) // check if file is valid(no NUL
 //----------------------------------------------------------------
 static long device_ioctl(struct file *file,
                          unsigned int ioctl_command_id,
-                         unsigned int ioctl_param) // check if channel exists, if not create it and set it to private_data
+                         long unsigned int ioctl_param) // check if channel exists, if not create it and set it to private_data
 {
     // Switch according to the ioctl called
     if ((MSG_SLOT_CHANNEL != ioctl_command_id) || (ioctl_param == 0))
     {
         // wrong passed command or channel id
-        errno = EINVAL;
-        return -1;
+        return -EINVAL;
     }
 
-    file->private_data = (void *)ioctl_param; // set channel id to private data
+    file->private_data = (void *)(unsigned long)ioctl_param; // set channel id to private data
     // if ioctl is supposed to be called only after open, check if slot was opened
+    printk(KERN_INFO "Channel number set to %d\n", (unsigned int)(unsigned long)(file->private_data));
+    printk(KERN_INFO "Slot number %d first channel num is %d", iminor(file->f_inode), device_info.channels[iminor(file->f_inode)]->channel_id);
 
     return SUCCESS;
 }
@@ -263,14 +262,18 @@ struct file_operations Fops = {
 // Initialize the module - Register the character device
 static int __init simple_init(void)
 {
-    int rc = -1;
+    int rc = -1, i;
     // init dev struct
-    memset(&device_info, 0, sizeof(struct chardev_info));
-    for (int i = 0; i < 256; i++)
+    memset(&device_info, 0, sizeof(chardev_info));
+    device_info.channels = kmalloc(256 * sizeof(slot_channel *), GFP_KERNEL);
+    if (device_info.channels == NULL)
     {
-        device_info.channels[i] = NULL;
+        return -ENOMEM;
     }
-    
+    for (i = 0; i < 256; i++)
+    {
+        (device_info.channels)[i] = NULL;
+    }
 
     // Register driver capabilities. Obtain major num
     rc = register_chrdev(MAJOR_NUM, DEVICE_RANGE_NAME, &Fops);
