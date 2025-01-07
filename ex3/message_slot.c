@@ -134,7 +134,6 @@ static ssize_t device_read(struct file *file,
                 put_user(channel->message[i], &buffer[i]);
             }
             printk(KERN_INFO "Read from slot number %d channel number %d, message: %s\n", iminor(file->f_inode), channel_num, channel->message);
-            printk(KERN_INFO "Slot number is %d first channel num is %d channel to read\\write from is %d", iminor(file->f_inode), device_info.channels[iminor(file->f_inode)]->channel_id, channel_num);
             return channel->msg_len;
         }
         channel = channel->next;
@@ -142,7 +141,7 @@ static ssize_t device_read(struct file *file,
 
     // invalid channel id, channel does not exist or slot not opened
     printk(KERN_INFO "Failed to read from slot number %d channel number %d", iminor(file->f_inode), channel_num);
-    return -EINVAL;
+    return -EWOULDBLOCK;
 }
 
 //---------------------------------------------------------------
@@ -216,7 +215,6 @@ static ssize_t device_write(struct file *file,
     channel->channel_id = channel_num;
 
     printk(KERN_INFO "Wrote to slot number %d channel number %d, message: %s\n", iminor(file->f_inode), channel_num, channel->message);
-    printk(KERN_INFO "Slot number %d first channel num is %d", iminor(file->f_inode), device_info.channels[iminor(file->f_inode)]->channel_id);
 
     // return the number of input characters used
     return i;
@@ -237,7 +235,6 @@ static long device_ioctl(struct file *file,
     file->private_data = (void *)(unsigned long)ioctl_param; // set channel id to private data
     // if ioctl is supposed to be called only after open, check if slot was opened
     printk(KERN_INFO "Channel number set to %d\n", (unsigned int)(unsigned long)(file->private_data));
-    printk(KERN_INFO "Slot number %d first channel num is %d", iminor(file->f_inode), device_info.channels[iminor(file->f_inode)]->channel_id);
 
     return SUCCESS;
 }

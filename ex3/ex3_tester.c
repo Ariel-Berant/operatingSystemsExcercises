@@ -34,17 +34,17 @@ int main(void)
 	test1();
 	test2();
 	test3();
-	// test4();
-	// test5();
-	// test6();
-	// test7();
-	// test8();
-	// test9();
-	// test10();
-	// test11();
-	// test12();
-	// test13();
-	// test14();
+	test4();
+	test5();
+	test6();
+	test7();
+	test8();
+	test9();
+	test10();
+	test11();
+	test12();
+	test13();
+	test14();
 
 	printf("DONE!\n");
 
@@ -426,18 +426,22 @@ void test8()
 	device0_fd = open(DEV0, O_RDWR);
 	if (device0_fd < 0)
 	{
+		printf("8.0");
 		print_failure(8);
 		exit(0);
 	}
 
 	if (ioctl(device0_fd, MSG_SLOT_CHANNEL, 199) < 0)
 	{
+		printf("8.1");
 		print_failure(8);
 		exit(0);
 	}
 
 	if (read(device0_fd, msg, 128) != -1 || errno != EWOULDBLOCK)
 	{
+		printf("%d\n", errno);
+		printf("8.2\n");
 		print_failure(8);
 		exit(0);
 	}
