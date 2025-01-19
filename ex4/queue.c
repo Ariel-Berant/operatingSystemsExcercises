@@ -182,7 +182,7 @@ bool tryDequeue(void** data) {
     bool success = false;
     mtx_lock(&(q->lock));
     // If there is at least one element in the queue that the existing dequeues leave
-    if (q->actSize - q->threads->size > 0)
+    if (q->actSize > q->threads->size)
     {
         // Get the logically 1st element(index of threads->size) in the queue
         *data = getIthElement(q->threads->size);
