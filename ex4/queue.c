@@ -37,7 +37,6 @@ static queue* q;
 
 // Function to free a node
 void freeNode(Node* node) {
-    free(node->data);
     free(node);
 }
 
