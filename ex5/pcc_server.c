@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
 
 	char *endptr;
 	u_int32_t data_len, nread, count = 0;
-	struct sockaddr_in serv_addr, my_addr, peer_addr;
+	struct sockaddr_in serv_addr, peer_addr;
 	socklen_t addrsize = sizeof(struct sockaddr_in);
 
 	char data_buff[1024];

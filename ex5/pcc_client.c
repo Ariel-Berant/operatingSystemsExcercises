@@ -36,12 +36,11 @@ int main(int argc, char *argv[])
 	
 
 	struct sockaddr_in serv_addr; // where we Want to get to
-	socklen_t addrsize = sizeof(struct sockaddr_in);
 
 	memset(&file_buff, 0, sizeof(file_buff));
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
-		fprintf(stderr, "\n Error : Could not create socket. %s\n", strerror(errno));
+		fprintf(stderr, "Error : Could not create socket. %s\n", strerror(errno));
 		exit(1);
 	}
 
@@ -52,20 +51,17 @@ int main(int argc, char *argv[])
 
 	if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
 	{
-		fprintf(stderr, "\n Error : Connect Failed. %s \n", strerror(errno));
+		fprintf(stderr, "Error : Connect Failed. %s\n", strerror(errno));
 		exit(1);
 	}
 	
 	write(sockfd, &size, sizeof(u_int32_t));
-	printf("File size sent: %lu\n", st.st_size);
 
 	// send file
 	while ((read_bytes = read(fd, file_buff, sizeof(file_buff))) > 0)
 	{
 		write(sockfd, file_buff, read_bytes);
-		printf("Sent %d bytes\n", read_bytes);
 	}
-	printf("File sent\n");
 
 	// read # of printable characters
 	read(sockfd, printableChar, sizeof(u_int32_t));
